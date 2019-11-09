@@ -1,0 +1,156 @@
+version: "3.3"
+
+services:
+  traefik:
+    image: "traefik:v2.0.0-rc3"
+    container_name: "traefik"
+    command:
+      #- "--log.level=DEBUG"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--providers.docker"
+      - "--api"
+      - "--certificatesresolvers.myhttpchallenge.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.myhttpchallenge.acme.email=phozonnn@gmail.com"
+      - "--certificatesresolvers.myhttpchallenge.acme.storage=/letsencrypt/acme.json"
+      - --certificatesresolvers.myhttpchallenge.acme.httpchallenge=true
+      #- "--certificatesresolvers.myhttpchallenge.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
+      - "--metrics.prometheus=true"
+      - "--accesslog=true"
+      - "--accesslog.filepath=./logs/access.log"
+      - "--accesslog.bufferingsize=100"
+    networks:
+      - proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./letsencrypt:/letsencrypt"
+      - "./config.yml:/config.yml"
+    labels:
+      # Dashboard
+      - "traefik.http.routers.traefik.rule=Host(`dashboard.hehe.ovh`)"
+      - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.routers.traefik.tls.certresolver=myhttpchallenge"
+      - "traefik.http.routers.traefik.entrypoints=websecure"
+      - "traefik.http.routers.traefik.middlewares=authtraefik"
+      - "traefik.http.middlewares.authtraefik.basicauth.users=phozon:phozon"
+
+      # global redirect to https
+      - "traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)"
+      - "traefik.http.routers.http-catchall.entrypoints=web"
+      - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
+
+      # middleware redirect
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+
+  julien.sh:
+    image: nginx:alpine
+    container_name: julien.sh
+    networks:
+      - proxy
+    labels:
+      - "traefik.http.routers.julien-sh.rule=Host(`julien.sh`)"
+      - "traefik.http.routers.julien-sh.entrypoints=websecure"
+      - "traefik.enable=true"
+      - "traefik.http.routers.julien-sh.tls.certresolver=myhttpchallenge"
+      - "traefik.docker.network=proxy"
+    volumes:
+      - "/var/www/julien.sh:/usr/share/nginx/html"
+
+  cybersec.rocks:
+    image: nginx:alpine
+    container_name: cybersec.rocks
+    networks:
+      - proxy
+    labels:
+      - "traefik.http.routers.cybersec-rocks.rule=Host(`cybersec.rocks`)"
+      - "traefik.http.routers.cybersec-rocks.entrypoints=websecure"
+      - "traefik.enable=true"
+      - "traefik.http.routers.cybersec-rocks.tls.certresolver=myhttpchallenge"
+    volumes:
+      - "/var/www/cybersec.rocks:/usr/share/nginx/html"
+
+  hehe.ovh:
+    image: nginx:alpine
+    container_name: hehe.ovh
+    networks:
+      - proxy
+    labels:
+      - "traefik.http.routers.hehe-ovh.rule=Host(`hehe.ovh`)"
+      - "traefik.http.routers.hehe-ovh.entrypoints=websecure"
+      - "traefik.enable=true"
+      - "traefik.http.routers.hehe-ovh.tls.certresolver=myhttpchallenge"
+    volumes:
+      - "/var/www/html:/usr/share/nginx/html"
+
+  transmission:
+    image: linuxserver/transmission
+    networks:
+      - proxy
+    container_name: seedbox
+    environment:
+      - PUID=1001
+      - PGID=1001
+      - TZ=Europe/Paris
+    volumes:
+      - /home/anon/docker/transmission/config:/config
+      - /home/anon/repo/torrents/downloads:/downloads
+      - /home/anon/repo/torrents/watch:/watch
+    labels:
+      - "traefik.http.routers.seedbox-hehe-ovh.rule=Host(`seedbox.hehe.ovh`)"
+      - "traefik.http.routers.seedbox-hehe-ovh.entrypoints=websecure"
+      - "traefik.enable=true"
+      - "traefik.http.routers.seedbox-hehe-ovh.tls.certresolver=myhttpchallenge"
+      - "traefik.http.routers.seedbox-hehe-ovh.middlewares=authtraefik"
+      - "traefik.docker.network=proxy"
+
+  shaarli:
+    image: shaarli/shaarli:master
+    container_name: shaarli
+    networks:
+      - proxy
+    labels:
+      - "traefik.http.routers.shaarli-hehe-ovh.rule=Host(`shaarli.hehe.ovh`)"
+      - "traefik.http.routers.shaarli-hehe-ovh.entrypoints=websecure"
+      - "traefik.enable=true"
+      - "traefik.http.routers.shaarli-hehe-ovh.tls.certresolver=myhttpchallenge"
+      - "traefik.docker.network=proxy"
+    volumes:
+      - /home/anon/docker/shaarli/shaarli-cache:/var/www/shaarli/cache
+      - /home/anon/docker/shaarli/shaarli-data:/var/www/shaarli/data
+
+  repo:
+    image: jetbrainsinfra/nginx-file-listing:0.2
+    container_name: repo
+    networks:
+      - proxy
+    labels:
+      - "traefik.http.routers.repo-hehe-ovh.rule=Host(`repo.hehe.ovh`)"
+      - "traefik.http.routers.repo-hehe-ovh.entrypoints=websecure"
+      - "traefik.enable=true"
+      - "traefik.http.routers.repo-hehe-ovh.tls.certresolver=myhttpchallenge"
+      - "traefik.http.routers.repo-hehe-ovh.middlewares=authtraefik"
+      - "traefik.docker.network=proxy"
+    volumes:
+      - "/home/anon/repo:/mnt/data"
+
+  portainer:
+    image: portainer/portainer
+    container_name: portainer
+    networks:
+      - proxy
+    labels:
+      - "traefik.http.routers.portainer-hehe-ovh.rule=Host(`portainer.hehe.ovh`)"
+      - "traefik.http.routers.portainer-hehe-ovh.entrypoints=websecure"
+      - "traefik.enable=true"
+      - "traefik.http.routers.portainer-hehe-ovh.tls.certresolver=myhttpchallenge"
+      - "traefik.docker.network=proxy"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./data:/data
+
+networks:
+  proxy:
+    external: true
